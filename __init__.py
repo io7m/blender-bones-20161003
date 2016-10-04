@@ -43,7 +43,7 @@ class ExportCalcium(bpy.types.Operator):
 
   def invoke(self, context, event):
     if not self.filepath:
-      self.filepath = bpy.path.ensure_ext(bpy.data.filepath, ".x")
+      self.filepath = bpy.path.ensure_ext(bpy.data.filepath, ".ca")
     context.window_manager.fileselect_add(self)
     return {'RUNNING_MODAL'}
 
