@@ -21,6 +21,9 @@ import bpy_extras.io_utils
 
 AXIS_CONVERSION_MATRIX = bpy_extras.io_utils.axis_conversion(to_forward='-Z', to_up='Y').to_4x4()
 
+def _convertMatrix(m):
+  return AXIS_CONVERSION_MATRIX * m
+
 def _writeBoneCurvesTranslation(out_file, armature_by_bone, action, bone_name):
   assert type(out_file) == io.TextIOWrapper
   assert type(armature_by_bone) == type({})
@@ -59,7 +62,7 @@ def _writeBoneCurvesTranslation(out_file, armature_by_bone, action, bone_name):
       assert bone_name in armature.pose.bones, "No bone %s in armature" % bone_name
       bone = armature.pose.bones[bone_name]
 
-      value = AXIS_CONVERSION_MATRIX * bone.matrix.to_translation()
+      value = _convertMatrix(bone.matrix).to_translation()
       out_file.write("        [curve-keyframe\n")
       out_file.write("          [curve-keyframe-index %d]\n" % index)
       out_file.write("          [curve-keyframe-vector3 %f %f %f]]\n" % (value.x, value.y, value.z))
@@ -108,7 +111,7 @@ def _writeBoneCurvesScale(out_file, armature_by_bone, action, bone_name):
       assert bone_name in armature.pose.bones, "No bone %s in armature" % bone_name
       bone = armature.pose.bones[bone_name]
 
-      value = AXIS_CONVERSION_MATRIX * bone.matrix.to_translation()
+      value = _convertMatrix(bone.matrix).to_scale()
       out_file.write("        [curve-keyframe\n")
       out_file.write("          [curve-keyframe-index %d]\n" % index)
       out_file.write("          [curve-keyframe-vector3 %f %f %f]]\n" % (value.x, value.y, value.z))
@@ -208,9 +211,10 @@ def _writeArmatures(out_file, armature_objects):
       assert (bone.name in armature_by_bone) == False, "Bone name %s refers to more than one armature!" % bone.name
       armature_by_bone[bone.name] = armature
 
-      bone_trans  = AXIS_CONVERSION_MATRIX * bone.matrix_local.to_translation()
+      bone_mat    = _convertMatrix(bone.matrix_local)
+      bone_trans  = bone_mat.to_translation()
       bone_orient = bone.matrix_local.to_quaternion()
-      bone_scale  = bone.matrix_local.to_scale()
+      bone_scale  = bone_mat.to_scale()
 
       out_file.write("    [bone\n")
       out_file.write("      [bone-name         \"%s\"]\n" % bone.name)
