@@ -1,8 +1,8 @@
 all: calcium.zip
 
-calcium.zip: __init__.py export.py
+calcium.zip: src/__init__.py src/export.py
 	mkdir calcium
-	cp *.py calcium
+	cp src/*.py calcium
 	zip -r -9 calcium.zip calcium
 
 clean:
