@@ -45,7 +45,15 @@ class ExportCalcium(bpy.types.Operator):
 
     from . import export
     e = export.CalciumExporter(args)
-    e.write(self.filepath)
+
+    try:
+      e.write(self.filepath)
+    except export.CalciumNoArmatureSelected as ex:
+      self.report({'ERROR'}, ex.value)
+    except export.CalciumTooManyArmaturesSelected as ex:
+      self.report({'ERROR'}, ex.value)
+    #endtry
+
     return {'FINISHED'}
   #end
 
