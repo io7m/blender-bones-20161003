@@ -21,8 +21,17 @@ import bpy_extras.io_utils
 
 AXIS_CONVERSION_MATRIX = bpy_extras.io_utils.axis_conversion(to_forward='-Z', to_up='Y').to_4x4()
 
+CALCIUM_VERBOSE_LOGGING = 1
+
+def _log(fmt, *args):
+  if 1 == CALCIUM_VERBOSE_LOGGING:
+    print("calcium: " + (fmt % args))
+  #endif
+#end
+
 def _convertMatrix(m):
   return AXIS_CONVERSION_MATRIX * m
+#end
 
 def _writeBoneCurvesTranslation(out_file, armature_by_bone, action, bone_name):
   assert type(out_file) == io.TextIOWrapper
@@ -47,7 +56,9 @@ def _writeBoneCurvesTranslation(out_file, armature_by_bone, action, bone_name):
     for frame in curve_z.keyframe_points:
       frames[int(frame.co.x)] = True
 
-  if len(frames) > 0:
+  frames_count = len(frames)
+  _log("action[%s]: translation frame count: %d", action.name, frames_count)
+  if frames_count > 0:
     out_file.write("    [curve\n")
     out_file.write("      [curve-bone \"%s\"]\n" % bone_name)
     out_file.write("      [curve-type translation]\n")
@@ -96,7 +107,9 @@ def _writeBoneCurvesScale(out_file, armature_by_bone, action, bone_name):
     for frame in curve_z.keyframe_points:
       frames[int(frame.co.x)] = True
 
-  if len(frames) > 0:
+  frames_count = len(frames)
+  _log("action[%s]: scale frame count: %d", action.name, frames_count)
+  if frames_count > 0:
     out_file.write("    [curve\n")
     out_file.write("      [curve-bone \"%s\"]\n" % bone_name)
     out_file.write("      [curve-type scale]\n")
@@ -149,7 +162,9 @@ def _writeBoneCurvesOrientation(out_file, armature_by_bone, action, bone_name):
     for frame in curve_w.keyframe_points:
       frames[int(frame.co.x)] = True
 
-  if len(frames) > 0:
+  frames_count = len(frames)
+  _log("action[%s]: orientation frame count: %d", action.name, frames_count)
+  if frames_count > 0:
     out_file.write("    [curve\n")
     out_file.write("      [curve-bone \"%s\"]\n" % bone_name)
     out_file.write("      [curve-type orientation]\n")
@@ -175,7 +190,7 @@ def _writeBoneCurvesOrientation(out_file, armature_by_bone, action, bone_name):
   #endif
 #end
 
-def collectArmatureObjects(all_objects):
+def _collectArmatureObjects(all_objects):
   assert type(all_objects) == bpy.types.bpy_prop_collection
   assert (len(all_objects) > 0), "Must have at least one object in the scene"
 
@@ -183,6 +198,7 @@ def collectArmatureObjects(all_objects):
 
   for obj in all_objects:
     if obj.type == 'ARMATURE':
+      _log("_collectArmatureObjects: added %s", obj.name)
       assert (obj.name in armature_objects) == False, "Armature object %s already added" % obj.name
       armature_objects[obj.name] = obj
     #endif
@@ -200,6 +216,7 @@ def _writeArmatures(out_file, armature_objects):
   for armature_object_name, armature in armature_objects.items():
     assert type(armature) == bpy_types.Object
     assert armature.type == 'ARMATURE'
+    _log("_writeArmatures: %s (%s)", armature_object_name, armature.name)
 
     out_file.write("[skeleton\n")
     out_file.write("  [skeleton-name \"%s\"]\n" % armature.name)
@@ -244,6 +261,8 @@ def _writeActions(out_file, armature_by_bone, actions):
     if action.name == 'poses':
       continue
 
+    _log("_writeActions: %s", action.name)
+
     out_file.write("[action\n")
     out_file.write("  [name \"%s\"]\n" % action.name)
     out_file.write("  [curves\n")
@@ -267,7 +286,7 @@ def _writeFile(out_file):
   out_file.write("[version 1 0]\n")
   out_file.write("[action-fps %d]\n" % bpy.context.scene.render.fps)
 
-  armature_objects = collectArmatureObjects(bpy.data.objects)
+  armature_objects = _collectArmatureObjects(bpy.data.objects)
   assert (len(armature_objects) > 0), "Must have at least one armature"
 
   armature_by_bone = _writeArmatures(out_file, armature_objects)
@@ -278,10 +297,18 @@ def _writeFile(out_file):
   bpy.context.scene.frame_set(frame_saved)
 #end
 
-def write(path):
+def write(options, path):
+  assert type(options) == type({})
   assert type(path) == str
+
+  if "verbose" in options:
+    CALCIUM_VERBOSE_LOGGING = 1
+  #endif
+
+  _log("writing: %s", path)
   out_file = open(path, "wt")
   _writeFile(out_file)
+  _log("closing: %s", path)
   out_file.close()
 #end
 

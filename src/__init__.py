@@ -38,7 +38,7 @@ class ExportCalcium(bpy.types.Operator):
   def execute(self, context):
     self.filepath = bpy.path.ensure_ext(self.filepath, ".ca")
     from . import export
-    export.write(self.filepath)
+    export.write({}, self.filepath)
     return {'FINISHED'}
 
   def invoke(self, context, event):
