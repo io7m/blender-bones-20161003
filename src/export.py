@@ -20,303 +20,307 @@ import bpy_types
 import io
 import mathutils
 
-AXIS_CONVERSION_MATRIX = bpy_extras.io_utils.axis_conversion(to_forward='-Z', to_up='Y').to_4x4()
+class CalciumExporter:
+  __verbose     = False
+  __axis_matrix = bpy_extras.io_utils.axis_conversion(to_forward='-Z', to_up='Y').to_4x4()
 
-CALCIUM_VERBOSE_LOGGING = 1
+  def __init__(self, options):
+    assert type(options) == type({})
 
-def _log(fmt, *args):
-  if 1 == CALCIUM_VERBOSE_LOGGING:
-    print("calcium: " + (fmt % args))
-  #endif
-#end
+    self.__verbose = options['verbose']
+    assert type(self.__verbose) == bool
+    self.__log("verbose logging enabled")
+  #end
 
-def _convertMatrix(m):
-  return AXIS_CONVERSION_MATRIX * m
-#end
-
-def _convertQuaternion(q):
-  aa = q.to_axis_angle()
-  axis = aa[0]
-  axis = AXIS_CONVERSION_MATRIX * axis
-  return mathutils.Quaternion(axis, aa[1])
-#end
-
-def _writeBoneCurvesTranslation(out_file, armature_by_bone, action, bone_name):
-  assert type(out_file) == io.TextIOWrapper
-  assert type(armature_by_bone) == type({})
-  assert type(action) == bpy.types.Action
-  assert type(bone_name) == str
-
-  curve_name = 'pose.bones["%s"].location' % bone_name
-
-  frames = {}
-  curve_x = action.fcurves.find(curve_name, 0)
-  curve_y = action.fcurves.find(curve_name, 1)
-  curve_z = action.fcurves.find(curve_name, 2)
-
-  if curve_x != None:
-    for frame in curve_x.keyframe_points:
-      frames[int(frame.co.x)] = True
-  if curve_y != None:
-    for frame in curve_y.keyframe_points:
-      frames[int(frame.co.x)] = True
-  if curve_z != None:
-    for frame in curve_z.keyframe_points:
-      frames[int(frame.co.x)] = True
-
-  frames_count = len(frames)
-  _log("action[%s]: translation frame count: %d", action.name, frames_count)
-  if frames_count > 0:
-    out_file.write("    [curve\n")
-    out_file.write("      [curve-bone \"%s\"]\n" % bone_name)
-    out_file.write("      [curve-type translation]\n")
-    out_file.write("      [curve-keyframes\n")
-
-    for index in sorted(frames.keys()):
-      bpy.context.scene.frame_set(index)
-
-      assert bone_name in armature_by_bone, "No armature for bone %s" % bone_name
-      armature = armature_by_bone[bone_name]
-
-      assert bone_name in armature.pose.bones, "No bone %s in armature" % bone_name
-      bone = armature.pose.bones[bone_name]
-
-      value = _convertMatrix(bone.matrix).to_translation()
-      out_file.write("        [curve-keyframe\n")
-      out_file.write("          [curve-keyframe-index %d]\n" % index)
-      out_file.write("          [curve-keyframe-vector3 %f %f %f]]\n" % (value.x, value.y, value.z))
-    #end
-
-    out_file.write("    ]]\n")
-    out_file.write("\n")
-  #endif
-#end
-
-def _writeBoneCurvesScale(out_file, armature_by_bone, action, bone_name):
-  assert type(out_file) == io.TextIOWrapper
-  assert type(armature_by_bone) == type({})
-  assert type(action) == bpy.types.Action
-  assert type(bone_name) == str
-
-  curve_name = 'pose.bones["%s"].scale' % bone_name
-
-  frames = {}
-  curve_x = action.fcurves.find(curve_name, 0)
-  curve_y = action.fcurves.find(curve_name, 1)
-  curve_z = action.fcurves.find(curve_name, 2)
-
-  if curve_x != None:
-    for frame in curve_x.keyframe_points:
-      frames[int(frame.co.x)] = True
-  if curve_y != None:
-    for frame in curve_y.keyframe_points:
-      frames[int(frame.co.x)] = True
-  if curve_z != None:
-    for frame in curve_z.keyframe_points:
-      frames[int(frame.co.x)] = True
-
-  frames_count = len(frames)
-  _log("action[%s]: scale frame count: %d", action.name, frames_count)
-  if frames_count > 0:
-    out_file.write("    [curve\n")
-    out_file.write("      [curve-bone \"%s\"]\n" % bone_name)
-    out_file.write("      [curve-type scale]\n")
-    out_file.write("      [curve-keyframes\n")
-
-    for index in sorted(frames.keys()):
-      bpy.context.scene.frame_set(index)
-
-      assert bone_name in armature_by_bone, "No armature for bone %s" % bone_name
-      armature = armature_by_bone[bone_name]
-
-      assert bone_name in armature.pose.bones, "No bone %s in armature" % bone_name
-      bone = armature.pose.bones[bone_name]
-
-      value = _convertMatrix(bone.matrix).to_scale()
-      out_file.write("        [curve-keyframe\n")
-      out_file.write("          [curve-keyframe-index %d]\n" % index)
-      out_file.write("          [curve-keyframe-vector3 %f %f %f]]\n" % (value.x, value.y, value.z))
-    #end
-
-    out_file.write("    ]]\n")
-    out_file.write("\n")
-  #endif
-#end
-
-def _writeBoneCurvesOrientation(out_file, armature_by_bone, action, bone_name):
-  assert type(out_file) == io.TextIOWrapper
-  assert type(armature_by_bone) == type({})
-  assert type(action) == bpy.types.Action
-  assert type(bone_name) == str
-
-  curve_name = 'pose.bones["%s"].rotation_quaternion' % bone_name
-
-  frames = {}
-  curve_w = action.fcurves.find(curve_name, 0)
-  curve_x = action.fcurves.find(curve_name, 1)
-  curve_y = action.fcurves.find(curve_name, 2)
-  curve_z = action.fcurves.find(curve_name, 3)
-
-  if curve_x != None:
-    for frame in curve_x.keyframe_points:
-      frames[int(frame.co.x)] = True
-  if curve_y != None:
-    for frame in curve_y.keyframe_points:
-      frames[int(frame.co.x)] = True
-  if curve_z != None:
-    for frame in curve_z.keyframe_points:
-      frames[int(frame.co.x)] = True
-  if curve_w != None:
-    for frame in curve_w.keyframe_points:
-      frames[int(frame.co.x)] = True
-
-  frames_count = len(frames)
-  _log("action[%s]: orientation frame count: %d", action.name, frames_count)
-  if frames_count > 0:
-    out_file.write("    [curve\n")
-    out_file.write("      [curve-bone \"%s\"]\n" % bone_name)
-    out_file.write("      [curve-type orientation]\n")
-    out_file.write("      [curve-keyframes\n")
-
-    for index in sorted(frames.keys()):
-      bpy.context.scene.frame_set(index)
-
-      assert bone_name in armature_by_bone, "No armature for bone %s" % bone_name
-      armature = armature_by_bone[bone_name]
-
-      assert bone_name in armature.pose.bones, "No bone %s in armature" % bone_name
-      bone = armature.pose.bones[bone_name]
-
-      value = _convertQuaternion(bone.matrix.to_quaternion())
-      out_file.write("        [curve-keyframe\n")
-      out_file.write("          [curve-keyframe-index %d]\n" % index)
-      out_file.write("          [curve-keyframe-quaternion-xyzw %f %f %f %f]]\n" % (value.x, value.y, value.z, value.w))
-    #end
-
-    out_file.write("    ]]\n")
-    out_file.write("\n")
-  #endif
-#end
-
-def _collectArmatureObjects(all_objects):
-  assert type(all_objects) == bpy.types.bpy_prop_collection
-  assert (len(all_objects) > 0), "Must have at least one object in the scene"
-
-  armature_objects = {}
-
-  for obj in all_objects:
-    if obj.type == 'ARMATURE':
-      _log("_collectArmatureObjects: added %s", obj.name)
-      assert (obj.name in armature_objects) == False, "Armature object %s already added" % obj.name
-      armature_objects[obj.name] = obj
+  def __log(self, fmt, *args):
+    if True == self.__verbose:
+      print("calcium: " + (fmt % args))
     #endif
   #end
 
-  return armature_objects
-#end
-
-def _writeArmatures(out_file, armature_objects):
-  assert type(out_file) == io.TextIOWrapper
-  assert type(armature_objects) == type({})
-  assert (len(armature_objects) > 0), "Must have at least one armature"
-
-  armature_by_bone = {}
-  for armature_object_name, armature in armature_objects.items():
-    assert type(armature) == bpy_types.Object
-    assert armature.type == 'ARMATURE'
-    _log("_writeArmatures: %s (%s)", armature_object_name, armature.name)
-
-    out_file.write("[skeleton\n")
-    out_file.write("  [skeleton-name \"%s\"]\n" % armature.name)
-    out_file.write("  [skeleton-bones\n")
-
-    for pose_bone in armature.pose.bones:
-      bone = pose_bone.bone
-
-      assert (bone.name in armature_by_bone) == False, "Bone name %s refers to more than one armature!" % bone.name
-      armature_by_bone[bone.name] = armature
-
-      bone_mat    = _convertMatrix(bone.matrix_local)
-      bone_trans  = bone_mat.to_translation()
-      bone_orient = _convertQuaternion(bone.matrix.to_quaternion())
-      bone_scale  = bone_mat.to_scale()
-
-      out_file.write("    [bone\n")
-      out_file.write("      [bone-name             \"%s\"]\n" % bone.name)
-      if bone.parent != None:
-        out_file.write("      [bone-parent           \"%s\"]\n" % bone.parent.name)
-      out_file.write("      [bone-translation      %f %f %f]\n" % (bone_trans.x, bone_trans.y, bone_trans.z))
-      out_file.write("      [bone-scale            %f %f %f]\n" % (bone_scale.x, bone_scale.y, bone_scale.z))
-      out_file.write("      [bone-orientation-xyzw %f %f %f %f]]\n" % (bone_orient.x, bone_orient.y, bone_orient.z, bone_orient.w))
-    #end
-
-    out_file.write("  ]\n")
-    out_file.write("]\n")
+  def __convertMatrix(self, m):
+    return self.__axis_matrix * m
   #end
 
-  out_file.write("\n")
-  return armature_by_bone
-#end
+  def __convertQuaternion(self, q):
+    aa = q.to_axis_angle()
+    axis = aa[0]
+    axis = self.__axis_matrix * axis
+    return mathutils.Quaternion(axis, aa[1])
+  #end
 
-def _writeActions(out_file, armature_by_bone, actions):
-  assert type(out_file) == io.TextIOWrapper
-  assert type(armature_by_bone) == type({})
-  assert type(actions) == bpy.types.bpy_prop_collection
-  assert len(armature_by_bone) > 0, "Must have at least one armature"
-  assert len(actions) > 0, "Must have at least one action"
+  def __writeBoneCurvesTranslation(self, out_file, armature_by_bone, action, bone_name):
+    assert type(out_file) == io.TextIOWrapper
+    assert type(armature_by_bone) == type({})
+    assert type(action) == bpy.types.Action
+    assert type(bone_name) == str
 
-  for action in actions:
-    if action.name == 'poses':
-      continue
+    curve_name = 'pose.bones["%s"].location' % bone_name
 
-    _log("_writeActions: %s", action.name)
+    frames = {}
+    curve_x = action.fcurves.find(curve_name, 0)
+    curve_y = action.fcurves.find(curve_name, 1)
+    curve_z = action.fcurves.find(curve_name, 2)
 
-    out_file.write("[action\n")
-    out_file.write("  [name \"%s\"]\n" % action.name)
-    out_file.write("  [curves\n")
+    if curve_x != None:
+      for frame in curve_x.keyframe_points:
+        frames[int(frame.co.x)] = True
+    if curve_y != None:
+      for frame in curve_y.keyframe_points:
+        frames[int(frame.co.x)] = True
+    if curve_z != None:
+      for frame in curve_z.keyframe_points:
+        frames[int(frame.co.x)] = True
+
+    frames_count = len(frames)
+    self.__log("action[%s]: translation frame count: %d", action.name, frames_count)
+    if frames_count > 0:
+      out_file.write("    [curve\n")
+      out_file.write("      [curve-bone \"%s\"]\n" % bone_name)
+      out_file.write("      [curve-type translation]\n")
+      out_file.write("      [curve-keyframes\n")
+
+      for index in sorted(frames.keys()):
+        bpy.context.scene.frame_set(index)
+
+        assert bone_name in armature_by_bone, "No armature for bone %s" % bone_name
+        armature = armature_by_bone[bone_name]
+
+        assert bone_name in armature.pose.bones, "No bone %s in armature" % bone_name
+        bone = armature.pose.bones[bone_name]
+
+        value = self.__convertMatrix(bone.matrix).to_translation()
+        out_file.write("        [curve-keyframe\n")
+        out_file.write("          [curve-keyframe-index %d]\n" % index)
+        out_file.write("          [curve-keyframe-vector3 %f %f %f]]\n" % (value.x, value.y, value.z))
+      #end
+
+      out_file.write("    ]]\n")
+      out_file.write("\n")
+    #endif
+  #end
+
+  def __writeBoneCurvesScale(self, out_file, armature_by_bone, action, bone_name):
+    assert type(out_file) == io.TextIOWrapper
+    assert type(armature_by_bone) == type({})
+    assert type(action) == bpy.types.Action
+    assert type(bone_name) == str
+
+    curve_name = 'pose.bones["%s"].scale' % bone_name
+
+    frames = {}
+    curve_x = action.fcurves.find(curve_name, 0)
+    curve_y = action.fcurves.find(curve_name, 1)
+    curve_z = action.fcurves.find(curve_name, 2)
+
+    if curve_x != None:
+      for frame in curve_x.keyframe_points:
+        frames[int(frame.co.x)] = True
+    if curve_y != None:
+      for frame in curve_y.keyframe_points:
+        frames[int(frame.co.x)] = True
+    if curve_z != None:
+      for frame in curve_z.keyframe_points:
+        frames[int(frame.co.x)] = True
+
+    frames_count = len(frames)
+    self.__log("action[%s]: scale frame count: %d", action.name, frames_count)
+    if frames_count > 0:
+      out_file.write("    [curve\n")
+      out_file.write("      [curve-bone \"%s\"]\n" % bone_name)
+      out_file.write("      [curve-type scale]\n")
+      out_file.write("      [curve-keyframes\n")
+
+      for index in sorted(frames.keys()):
+        bpy.context.scene.frame_set(index)
+
+        assert bone_name in armature_by_bone, "No armature for bone %s" % bone_name
+        armature = armature_by_bone[bone_name]
+
+        assert bone_name in armature.pose.bones, "No bone %s in armature" % bone_name
+        bone = armature.pose.bones[bone_name]
+
+        value = self.__convertMatrix(bone.matrix).to_scale()
+        out_file.write("        [curve-keyframe\n")
+        out_file.write("          [curve-keyframe-index %d]\n" % index)
+        out_file.write("          [curve-keyframe-vector3 %f %f %f]]\n" % (value.x, value.y, value.z))
+      #end
+
+      out_file.write("    ]]\n")
+      out_file.write("\n")
+    #endif
+  #end
+
+  def __writeBoneCurvesOrientation(self, out_file, armature_by_bone, action, bone_name):
+    assert type(out_file) == io.TextIOWrapper
+    assert type(armature_by_bone) == type({})
+    assert type(action) == bpy.types.Action
+    assert type(bone_name) == str
+
+    curve_name = 'pose.bones["%s"].rotation_quaternion' % bone_name
+
+    frames = {}
+    curve_w = action.fcurves.find(curve_name, 0)
+    curve_x = action.fcurves.find(curve_name, 1)
+    curve_y = action.fcurves.find(curve_name, 2)
+    curve_z = action.fcurves.find(curve_name, 3)
+
+    if curve_x != None:
+      for frame in curve_x.keyframe_points:
+        frames[int(frame.co.x)] = True
+    if curve_y != None:
+      for frame in curve_y.keyframe_points:
+        frames[int(frame.co.x)] = True
+    if curve_z != None:
+      for frame in curve_z.keyframe_points:
+        frames[int(frame.co.x)] = True
+    if curve_w != None:
+      for frame in curve_w.keyframe_points:
+        frames[int(frame.co.x)] = True
+
+    frames_count = len(frames)
+    self.__log("action[%s]: orientation frame count: %d", action.name, frames_count)
+    if frames_count > 0:
+      out_file.write("    [curve\n")
+      out_file.write("      [curve-bone \"%s\"]\n" % bone_name)
+      out_file.write("      [curve-type orientation]\n")
+      out_file.write("      [curve-keyframes\n")
+
+      for index in sorted(frames.keys()):
+        bpy.context.scene.frame_set(index)
+
+        assert bone_name in armature_by_bone, "No armature for bone %s" % bone_name
+        armature = armature_by_bone[bone_name]
+
+        assert bone_name in armature.pose.bones, "No bone %s in armature" % bone_name
+        bone = armature.pose.bones[bone_name]
+
+        value = self.__convertQuaternion(bone.matrix.to_quaternion())
+        out_file.write("        [curve-keyframe\n")
+        out_file.write("          [curve-keyframe-index %d]\n" % index)
+        out_file.write("          [curve-keyframe-quaternion-xyzw %f %f %f %f]]\n" % (value.x, value.y, value.z, value.w))
+      #end
+
+      out_file.write("    ]]\n")
+      out_file.write("\n")
+    #endif
+  #end
+
+  def __collectArmatureObjects(self, all_objects):
+    assert type(all_objects) == bpy.types.bpy_prop_collection
+    assert (len(all_objects) > 0), "Must have at least one object in the scene"
+
+    armature_objects = {}
+
+    for obj in all_objects:
+      if obj.type == 'ARMATURE':
+        self.__log("_collectArmatureObjects: added %s", obj.name)
+        assert (obj.name in armature_objects) == False, "Armature object %s already added" % obj.name
+        armature_objects[obj.name] = obj
+      #endif
+    #end
+
+    return armature_objects
+  #end
+
+  def __writeArmatures(self, out_file, armature_objects):
+    assert type(out_file) == io.TextIOWrapper
+    assert type(armature_objects) == type({})
+    assert (len(armature_objects) > 0), "Must have at least one armature"
+
+    armature_by_bone = {}
+    for armature_object_name, armature in armature_objects.items():
+      assert type(armature) == bpy_types.Object
+      assert armature.type == 'ARMATURE'
+      self.__log("_writeArmatures: %s (%s)", armature_object_name, armature.name)
+
+      out_file.write("[skeleton\n")
+      out_file.write("  [skeleton-name \"%s\"]\n" % armature.name)
+      out_file.write("  [skeleton-bones\n")
+
+      for pose_bone in armature.pose.bones:
+        bone = pose_bone.bone
+
+        assert (bone.name in armature_by_bone) == False, "Bone name %s refers to more than one armature!" % bone.name
+        armature_by_bone[bone.name] = armature
+
+        bone_mat    = self.__convertMatrix(bone.matrix_local)
+        bone_trans  = bone_mat.to_translation()
+        bone_orient = self.__convertQuaternion(bone.matrix.to_quaternion())
+        bone_scale  = bone_mat.to_scale()
+
+        out_file.write("    [bone\n")
+        out_file.write("      [bone-name             \"%s\"]\n" % bone.name)
+        if bone.parent != None:
+          out_file.write("      [bone-parent           \"%s\"]\n" % bone.parent.name)
+        out_file.write("      [bone-translation      %f %f %f]\n" % (bone_trans.x, bone_trans.y, bone_trans.z))
+        out_file.write("      [bone-scale            %f %f %f]\n" % (bone_scale.x, bone_scale.y, bone_scale.z))
+        out_file.write("      [bone-orientation-xyzw %f %f %f %f]]\n" % (bone_orient.x, bone_orient.y, bone_orient.z, bone_orient.w))
+      #end
+
+      out_file.write("  ]\n")
+      out_file.write("]\n")
+    #end
+
     out_file.write("\n")
-
-    for bone_name in armature_by_bone.keys():
-      _writeBoneCurvesTranslation(out_file, armature_by_bone, action, bone_name)
-      _writeBoneCurvesScale(out_file, armature_by_bone, action, bone_name)
-      _writeBoneCurvesOrientation(out_file, armature_by_bone, action, bone_name)
-    #end
-
-    out_file.write("]]\n")
+    return armature_by_bone
   #end
 
-  out_file.write("\n")
-#end
+  def __writeActions(self, out_file, armature_by_bone, actions):
+    assert type(out_file) == io.TextIOWrapper
+    assert type(armature_by_bone) == type({})
+    assert type(actions) == bpy.types.bpy_prop_collection
+    assert len(armature_by_bone) > 0, "Must have at least one armature"
+    assert len(actions) > 0, "Must have at least one action"
 
-def _writeFile(out_file):
-  assert type(out_file) == io.TextIOWrapper
+    for action in actions:
+      if action.name == 'poses':
+        continue
 
-  out_file.write("[version 1 0]\n")
-  out_file.write("[action-fps %d]\n" % bpy.context.scene.render.fps)
+      self.__log("_writeActions: %s", action.name)
 
-  armature_objects = _collectArmatureObjects(bpy.data.objects)
-  assert (len(armature_objects) > 0), "Must have at least one armature"
+      out_file.write("[action\n")
+      out_file.write("  [name \"%s\"]\n" % action.name)
+      out_file.write("  [curves\n")
+      out_file.write("\n")
 
-  armature_by_bone = _writeArmatures(out_file, armature_objects)
-  assert (len(armature_by_bone) > 0), "Must have at least one bone"
+      for bone_name in armature_by_bone.keys():
+        self.__writeBoneCurvesTranslation(out_file, armature_by_bone, action, bone_name)
+        self.__writeBoneCurvesScale(out_file, armature_by_bone, action, bone_name)
+        self.__writeBoneCurvesOrientation(out_file, armature_by_bone, action, bone_name)
+      #end
 
-  frame_saved = bpy.context.scene.frame_current
-  _writeActions(out_file, armature_by_bone, bpy.data.actions)
-  bpy.context.scene.frame_set(frame_saved)
-#end
+      out_file.write("]]\n")
+    #end
 
-def write(options, path):
-  assert type(options) == type({})
-  assert type(path) == str
+    out_file.write("\n")
+  #end
 
-  if "verbose" in options:
-    CALCIUM_VERBOSE_LOGGING = 1
-  #endif
+  def __writeFile(self, out_file):
+    assert type(out_file) == io.TextIOWrapper
 
-  _log("writing: %s", path)
-  out_file = open(path, "wt")
-  _writeFile(out_file)
-  _log("closing: %s", path)
-  out_file.close()
-#end
+    out_file.write("[version 1 0]\n")
+    out_file.write("[action-fps %d]\n" % bpy.context.scene.render.fps)
 
+    armature_objects = self.__collectArmatureObjects(bpy.data.objects)
+    assert (len(armature_objects) > 0), "Must have at least one armature"
+
+    armature_by_bone = self.__writeArmatures(out_file, armature_objects)
+    assert (len(armature_by_bone) > 0), "Must have at least one bone"
+
+    frame_saved = bpy.context.scene.frame_current
+    self.__writeActions(out_file, armature_by_bone, bpy.data.actions)
+    bpy.context.scene.frame_set(frame_saved)
+  #end
+
+  def write(self, path):
+    assert type(path) == str
+
+    self.__log("writing: %s", path)
+    out_file = open(path, "wt")
+    self.__writeFile(out_file)
+    self.__log("closing: %s", path)
+    out_file.close()
+  #end
+
+#endclass

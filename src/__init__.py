@@ -32,12 +32,20 @@ import bpy
 class ExportCalcium(bpy.types.Operator):
   bl_idname = "export_scene.ca"
   bl_label = "Export Calcium"
+
   filepath = bpy.props.StringProperty(subtype='FILE_PATH')
+  verbose = bpy.props.BoolProperty(name="Verbose logging",description="Enable verbose debug logging",default=True)
 
   def execute(self, context):
     self.filepath = bpy.path.ensure_ext(self.filepath, ".ca")
+
+    args = {}
+    args['verbose'] = self.verbose
+    assert type(args['verbose']) == bool
+
     from . import export
-    export.write({}, self.filepath)
+    e = export.CalciumExporter(args)
+    e.write(self.filepath)
     return {'FINISHED'}
   #end
 
