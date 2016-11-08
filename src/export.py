@@ -254,25 +254,46 @@ class CalciumExporter:
     assert armature.type == 'ARMATURE'
     assert len(actions) > 0, "Must have at least one action"
 
-    for action in actions:
-      if action.name == 'poses':
-        continue
+    try:
+      if armature.animation_data is not None:
+        self.__log("__writeActions: saving action %s", armature.animation_data.action)
+        saved_action = armature.animation_data.action
+      else:
+        self.__log("__writeActions: creating temporary animation data")
+        armature.animation_data_create()
+      #endif
 
-      self.__log("_writeActions: %s", action.name)
+      for action in actions:
+        if action.name == 'poses':
+          continue
+        #endif
 
-      out_file.write("[action\n")
-      out_file.write("  [name \"%s\"]\n" % action.name)
-      out_file.write("  [curves\n")
-      out_file.write("\n")
+        self.__log("__writeActions: %s", action.name)
+        armature.animation_data.action = action
 
-      for bone_name in armature.pose.bones.keys():
-        self.__writeBoneCurvesTranslation(out_file, armature, action, bone_name)
-        self.__writeBoneCurvesScale(out_file, armature, action, bone_name)
-        self.__writeBoneCurvesOrientation(out_file, armature, action, bone_name)
+        out_file.write("[action\n")
+        out_file.write("  [name \"%s\"]\n" % action.name)
+        out_file.write("  [curves\n")
+        out_file.write("\n")
+
+        for bone_name in armature.pose.bones.keys():
+          self.__writeBoneCurvesTranslation(out_file, armature, action, bone_name)
+          self.__writeBoneCurvesScale(out_file, armature, action, bone_name)
+          self.__writeBoneCurvesOrientation(out_file, armature, action, bone_name)
+        #end
+
+        out_file.write("]]\n")
       #end
 
-      out_file.write("]]\n")
-    #end
+    finally:
+      if saved_action:
+        self.__log("__writeActions: restoring saved action %s", saved_action)
+        armature.animation_data.action = saved_action
+      else:
+        self.__log("__writeActions: clearing temporary animation data")
+        armature.animation_data_clear()
+      #endif
+    #endtry
 
     out_file.write("\n")
   #end
