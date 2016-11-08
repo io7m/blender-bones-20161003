@@ -14,10 +14,11 @@
 # OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 #
 
-import io
 import bpy
-import bpy_types
 import bpy_extras.io_utils
+import bpy_types
+import io
+import mathutils
 
 AXIS_CONVERSION_MATRIX = bpy_extras.io_utils.axis_conversion(to_forward='-Z', to_up='Y').to_4x4()
 
@@ -31,6 +32,13 @@ def _log(fmt, *args):
 
 def _convertMatrix(m):
   return AXIS_CONVERSION_MATRIX * m
+#end
+
+def _convertQuaternion(q):
+  aa = q.to_axis_angle()
+  axis = aa[0]
+  axis = AXIS_CONVERSION_MATRIX * axis
+  return mathutils.Quaternion(axis, aa[1])
 #end
 
 def _writeBoneCurvesTranslation(out_file, armature_by_bone, action, bone_name):
@@ -179,7 +187,7 @@ def _writeBoneCurvesOrientation(out_file, armature_by_bone, action, bone_name):
       assert bone_name in armature.pose.bones, "No bone %s in armature" % bone_name
       bone = armature.pose.bones[bone_name]
 
-      value = bone.matrix.to_quaternion()
+      value = _convertQuaternion(bone.matrix.to_quaternion())
       out_file.write("        [curve-keyframe\n")
       out_file.write("          [curve-keyframe-index %d]\n" % index)
       out_file.write("          [curve-keyframe-quaternion-xyzw %f %f %f %f]]\n" % (value.x, value.y, value.z, value.w))
@@ -230,7 +238,7 @@ def _writeArmatures(out_file, armature_objects):
 
       bone_mat    = _convertMatrix(bone.matrix_local)
       bone_trans  = bone_mat.to_translation()
-      bone_orient = bone.matrix.to_quaternion()
+      bone_orient = _convertQuaternion(bone.matrix.to_quaternion())
       bone_scale  = bone_mat.to_scale()
 
       out_file.write("    [bone\n")
