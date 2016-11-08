@@ -317,10 +317,10 @@ class CalciumExporter:
     assert armature.type == 'ARMATURE'
 
     self.__log("writing: %s", path)
-    out_file = open(path, "wt")
-    self.__writeFile(out_file, armature)
-    self.__log("closing: %s", path)
-    out_file.close()
+    with open(path, "wt") as out_file:
+      self.__writeFile(out_file, armature)
+      self.__log("closing: %s", path)
+    #endwith
   #end
 
 #endclass
