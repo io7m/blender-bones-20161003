@@ -32,7 +32,6 @@ import bpy
 class ExportCalcium(bpy.types.Operator):
   bl_idname = "export_scene.ca"
   bl_label = "Export Calcium"
-
   filepath = bpy.props.StringProperty(subtype='FILE_PATH')
 
   def execute(self, context):
@@ -40,24 +39,31 @@ class ExportCalcium(bpy.types.Operator):
     from . import export
     export.write({}, self.filepath)
     return {'FINISHED'}
+  #end
 
   def invoke(self, context, event):
     if not self.filepath:
       self.filepath = bpy.path.ensure_ext(bpy.data.filepath, ".ca")
     context.window_manager.fileselect_add(self)
     return {'RUNNING_MODAL'}
+  #end
+#endclass
 
 def menuFunction(self, context):
   self.layout.operator(ExportCalcium.bl_idname, text="Calcium (.ca)")
+#end
 
 def register():
   bpy.utils.register_class(ExportCalcium)
   bpy.types.INFO_MT_file_export.append(menuFunction)
+#end
 
 def unregister():
   bpy.utils.unregister_class(ExportCalcium)
   bpy.types.INFO_MT_file_export.remove(menuFunction)
+#end
 
 if __name__ == "__main__":
   register()
+#endif
 
