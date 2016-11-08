@@ -289,8 +289,11 @@ class CalciumExporter:
 
     if len(bpy.data.actions) > 0:
       frame_saved = bpy.context.scene.frame_current
-      self.__writeActions(out_file, armature, bpy.data.actions)
-      bpy.context.scene.frame_set(frame_saved)
+      try:
+        self.__writeActions(out_file, armature, bpy.data.actions)
+      finally:
+        bpy.context.scene.frame_set(frame_saved)
+      #endtry
     #endif
   #end
 
