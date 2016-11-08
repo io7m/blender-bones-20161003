@@ -131,10 +131,10 @@ def _writeBoneCurvesOrientation(out_file, armature_by_bone, action, bone_name):
   curve_name = 'pose.bones["%s"].rotation_quaternion' % bone_name
 
   frames = {}
-  curve_x = action.fcurves.find(curve_name, 0)
-  curve_y = action.fcurves.find(curve_name, 1)
-  curve_z = action.fcurves.find(curve_name, 2)
-  curve_w = action.fcurves.find(curve_name, 3)
+  curve_w = action.fcurves.find(curve_name, 0)
+  curve_x = action.fcurves.find(curve_name, 1)
+  curve_y = action.fcurves.find(curve_name, 2)
+  curve_z = action.fcurves.find(curve_name, 3)
 
   if curve_x != None:
     for frame in curve_x.keyframe_points:
@@ -167,7 +167,7 @@ def _writeBoneCurvesOrientation(out_file, armature_by_bone, action, bone_name):
       value = bone.matrix.to_quaternion()
       out_file.write("        [curve-keyframe\n")
       out_file.write("          [curve-keyframe-index %d]\n" % index)
-      out_file.write("          [curve-keyframe-quaternion4 %f %f %f %f]]\n" % (value.x, value.y, value.z, value.w))
+      out_file.write("          [curve-keyframe-quaternion-xyzw %f %f %f %f]]\n" % (value.x, value.y, value.z, value.w))
     #end
 
     out_file.write("    ]]\n")
@@ -213,16 +213,16 @@ def _writeArmatures(out_file, armature_objects):
 
       bone_mat    = _convertMatrix(bone.matrix_local)
       bone_trans  = bone_mat.to_translation()
-      bone_orient = bone.matrix_local.to_quaternion()
+      bone_orient = bone.matrix.to_quaternion()
       bone_scale  = bone_mat.to_scale()
 
       out_file.write("    [bone\n")
-      out_file.write("      [bone-name         \"%s\"]\n" % bone.name)
+      out_file.write("      [bone-name             \"%s\"]\n" % bone.name)
       if bone.parent != None:
-        out_file.write("      [bone-parent       \"%s\"]\n" % bone.parent.name)
-      out_file.write("      [bone-translation %f %f %f]\n" % (bone_trans.x, bone_trans.y, bone_trans.z))
-      out_file.write("      [bone-scale       %f %f %f]\n" % (bone_scale.x, bone_scale.y, bone_scale.z))
-      out_file.write("      [bone-orientation %f %f %f %f]]\n" % (bone_orient.x, bone_orient.y, bone_orient.z, bone_orient.w))
+        out_file.write("      [bone-parent           \"%s\"]\n" % bone.parent.name)
+      out_file.write("      [bone-translation      %f %f %f]\n" % (bone_trans.x, bone_trans.y, bone_trans.z))
+      out_file.write("      [bone-scale            %f %f %f]\n" % (bone_scale.x, bone_scale.y, bone_scale.z))
+      out_file.write("      [bone-orientation-xyzw %f %f %f %f]]\n" % (bone_orient.x, bone_orient.y, bone_orient.z, bone_orient.w))
     #end
 
     out_file.write("  ]\n")
