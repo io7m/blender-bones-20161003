@@ -33,8 +33,9 @@ class ExportCalcium(bpy.types.Operator):
   bl_idname = "export_scene.ca"
   bl_label = "Export Calcium"
 
-  filepath = bpy.props.StringProperty(subtype='FILE_PATH')
-  verbose = bpy.props.BoolProperty(name="Verbose logging",description="Enable verbose debug logging",default=True)
+  filepath                  = bpy.props.StringProperty(subtype='FILE_PATH')
+  verbose                   = bpy.props.BoolProperty(name="Verbose logging",description="Enable verbose debug logging",default=True)
+  export_child_mesh_weights = bpy.props.BoolProperty(name="Export child meshes",description="Export the vertex weights of the child meshes of the armature",default=True)
 
   def execute(self, context):
     self.filepath = bpy.path.ensure_ext(self.filepath, ".ca")
@@ -42,6 +43,9 @@ class ExportCalcium(bpy.types.Operator):
     args = {}
     args['verbose'] = self.verbose
     assert type(args['verbose']) == bool
+
+    args['export_child_mesh_weights'] = self.export_child_mesh_weights
+    assert type(args['export_child_mesh_weights']) == bool
 
     from . import export
     e = export.CalciumExporter(args)

@@ -48,6 +48,10 @@ class CalciumExporter:
     self.__verbose = options['verbose']
     assert type(self.__verbose) == bool
     self.__log("verbose logging enabled")
+
+    self.__export_child_mesh_weights = options['export_child_mesh_weights']
+    assert type(self.__export_child_mesh_weights) == bool
+    self.__log("exporting child mesh weights enabled")
   #end
 
   def __log(self, fmt, *args):
@@ -298,6 +302,43 @@ class CalciumExporter:
     out_file.write("\n")
   #end
 
+  def __writeMeshWeights(self, out_file, mesh):
+    assert type(out_file) == io.TextIOWrapper
+    assert type(mesh) == bpy_types.Object
+    assert mesh.type == 'MESH'
+
+    self.__log("__writeMeshWeights: considering mesh %s for export", mesh.name)
+
+    if len(mesh.vertex_groups) > 0:
+      self.__log("__writeMeshWeights: exporting mesh %s", mesh.name)
+
+      out_file.write("[mesh\n")
+      out_file.write("  [mesh-name \"%s\"]\n" % mesh.name)
+      out_file.write("  [mesh-weight-arrays\n")
+
+      vertices = mesh.data.vertices
+      vertex_count = len(vertices)
+
+      for vertex_group in mesh.vertex_groups:
+        self.__log("__writeMeshWeights: exporting %d weights for bone %s", vertex_count, vertex_group.name)
+
+        out_file.write("      [mesh-weight-array\n")
+        out_file.write("        [mesh-weight-array-bone \"%s\"]\n" % vertex_group.name)
+        out_file.write("        [mesh-weight-array-values\n")
+
+        for index in range (0, vertex_count):
+          out_file.write("          [mesh-weight-array-value %f]\n" % vertex_group.weight(index))
+        #endfor
+
+        out_file.write("        ]\n")
+        out_file.write("      ]\n")
+      #endfor
+
+      out_file.write("  ]\n")
+      out_file.write("]\n")
+    #endif
+  #endif
+
   def __writeFile(self, out_file, armature):
     assert type(out_file) == io.TextIOWrapper
     assert type(armature) == bpy_types.Object
@@ -307,6 +348,12 @@ class CalciumExporter:
     out_file.write("[action-fps %d]\n" % bpy.context.scene.render.fps)
 
     self.__writeArmature(out_file, armature)
+
+    for child in armature.children:
+      if child.type == 'MESH':
+        self.__writeMeshWeights(out_file, child)
+      #endif
+    #endfor
 
     if len(bpy.data.actions) > 0:
       frame_saved = bpy.context.scene.frame_current
