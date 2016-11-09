@@ -293,8 +293,8 @@ class CalciumExporter:
     for channel_name, channel_keyframes in keyframes_by_channel.items():
       for keyframe_index, keyframe in channel_keyframes.items():
 
-        self.__log("[%s][%s][%d]: interpolation %s", action.name, group_name, keyframe_index, keyframe.interpolation)
-        self.__log("[%s][%s][%d]: easing %s", action.name, group_name, keyframe_index, keyframe.easing)
+        self.__log("[%s][%s][keyframe %d]: interpolation %s", action.name, group_name, keyframe_index, keyframe.interpolation)
+        self.__log("[%s][%s][keyframe %d]: easing %s", action.name, group_name, keyframe_index, keyframe.easing)
 
         ex_interpolation = self.__transformInterpolation(keyframe.interpolation)
         if ex_interpolation == None:
@@ -429,6 +429,7 @@ class CalciumExporter:
 
       assert bone_name in armature.pose.bones, "No bone %s in armature" % bone_name
       bone = armature.pose.bones[bone_name]
+      assert type(bone) == bpy_types.PoseBone
 
       for index in sorted(frames.keys()):
         assert type(index) == int
@@ -437,7 +438,7 @@ class CalciumExporter:
 
         bpy.context.scene.frame_set(index)
 
-        value = self.__transformTranslationToExport(bone.matrix.to_translation())
+        value = self.__transformTranslationToExport(bone.matrix_basis.to_translation())
         out_file.write("        [curve-keyframe\n")
         out_file.write("          [curve-keyframe-index %d]\n" % index)
         out_file.write("          [curve-keyframe-interpolation \"%s\"]\n" % frame.interpolation)
@@ -479,6 +480,7 @@ class CalciumExporter:
 
       assert bone_name in armature.pose.bones, "No bone %s in armature" % bone_name
       bone = armature.pose.bones[bone_name]
+      assert type(bone) == bpy_types.PoseBone
 
       for index in sorted(frames.keys()):
         assert type(index) == int
@@ -487,7 +489,7 @@ class CalciumExporter:
 
         bpy.context.scene.frame_set(index)
 
-        value = self.__transformScaleToExport(bone.matrix.to_scale())
+        value = self.__transformScaleToExport(bone.matrix_basis.to_scale())
         out_file.write("        [curve-keyframe\n")
         out_file.write("          [curve-keyframe-index %d]\n" % index)
         out_file.write("          [curve-keyframe-interpolation \"%s\"]\n" % frame.interpolation)
@@ -530,6 +532,7 @@ class CalciumExporter:
 
       assert bone_name in armature.pose.bones, "No bone %s in armature" % bone_name
       bone = armature.pose.bones[bone_name]
+      assert type(bone) == bpy_types.PoseBone
 
       for index in sorted(frames.keys()):
         assert type(index) == int
@@ -538,7 +541,7 @@ class CalciumExporter:
 
         bpy.context.scene.frame_set(index)
 
-        value = self.__transformOrientationToExport(bone.matrix.to_quaternion())
+        value = self.__transformOrientationToExport(bone.matrix_basis.to_quaternion())
         out_file.write("        [curve-keyframe\n")
         out_file.write("          [curve-keyframe-index %d]\n" % index)
         out_file.write("          [curve-keyframe-interpolation \"%s\"]\n" % frame.interpolation)
