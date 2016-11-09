@@ -17,6 +17,7 @@
 import bpy
 import bpy_extras.io_utils
 import bpy_types
+import datetime
 import io
 import mathutils
 
@@ -41,6 +42,7 @@ class CalciumTooManyArmaturesSelected(Exception):
 class CalciumExporter:
   __verbose     = False
   __axis_matrix = bpy_extras.io_utils.axis_conversion(to_forward='-Z', to_up='Y').to_4x4()
+  __errors      = []
 
   def __init__(self, options):
     assert type(options) == type({})
@@ -88,12 +90,18 @@ class CalciumExporter:
     if curve_x != None:
       for frame in curve_x.keyframe_points:
         frames[int(frame.co.x)] = True
+      #endfor
+    #endif
     if curve_y != None:
       for frame in curve_y.keyframe_points:
         frames[int(frame.co.x)] = True
+      #endfor
+    #endif
     if curve_z != None:
       for frame in curve_z.keyframe_points:
         frames[int(frame.co.x)] = True
+      #endfor
+    #endif
 
     frames_count = len(frames)
     self.__log("action[%s]: translation frame count: %d", action.name, frames_count)
@@ -137,12 +145,18 @@ class CalciumExporter:
     if curve_x != None:
       for frame in curve_x.keyframe_points:
         frames[int(frame.co.x)] = True
+      #endfor
+    #endif
     if curve_y != None:
       for frame in curve_y.keyframe_points:
         frames[int(frame.co.x)] = True
+      #endfor
+    #endif
     if curve_z != None:
       for frame in curve_z.keyframe_points:
         frames[int(frame.co.x)] = True
+      #endfor
+    #endif
 
     frames_count = len(frames)
     self.__log("action[%s]: scale frame count: %d", action.name, frames_count)
@@ -187,15 +201,23 @@ class CalciumExporter:
     if curve_x != None:
       for frame in curve_x.keyframe_points:
         frames[int(frame.co.x)] = True
+      #endfor
+    #endif
     if curve_y != None:
       for frame in curve_y.keyframe_points:
         frames[int(frame.co.x)] = True
+      #endfor
+    #endif
     if curve_z != None:
       for frame in curve_z.keyframe_points:
         frames[int(frame.co.x)] = True
+      #endfor
+    #endif
     if curve_w != None:
       for frame in curve_w.keyframe_points:
         frames[int(frame.co.x)] = True
+      #endfor
+    #endif
 
     frames_count = len(frames)
     self.__log("action[%s]: orientation frame count: %d", action.name, frames_count)
@@ -365,8 +387,30 @@ class CalciumExporter:
     #endif
   #end
 
+  def __writeErrorLog(self, error_file, armature):
+    assert type(error_file) == io.TextIOWrapper
+    assert type(armature) == bpy_types.Object
+    assert armature.type == 'ARMATURE'
+
+    t = datetime.datetime.now()
+    error_file.write("Export of %s on %s\n" % (armature.name, t.isoformat()))
+    error_file.write("\n")
+
+    if len(self.__errors) > 0:
+      for error in self.__errors:
+        error_file.write("%s\n", error)
+      #endfor
+      error_file.write("Export failed due to errors.\n")
+    else:
+      error_file.write("Exported successfully.\n")
+    #endif
+  #end
+
   def write(self, path):
     assert type(path) == str
+    error_path = path + ".log"
+
+    self.__errors = []
 
     armature = False
     if len(bpy.context.selected_objects) > 0:
@@ -387,9 +431,14 @@ class CalciumExporter:
     assert type(armature) == bpy_types.Object
     assert armature.type == 'ARMATURE'
 
-    self.__log("writing: %s", path)
+    self.__log("opening: %s", path)
     with open(path, "wt") as out_file:
-      self.__writeFile(out_file, armature)
+      self.__log("opening: %s", error_path)
+      with open(error_path, "wt") as error_file:
+        self.__writeFile(out_file, armature)
+        self.__writeErrorLog(error_file, armature)
+        self.__log("closing: %s", error_path)
+      #endwith
       self.__log("closing: %s", path)
     #endwith
   #end
