@@ -561,10 +561,26 @@ class CalciumExporter:
     out_file.write("  [skeleton-bones\n")
 
     for pose_bone in armature.pose.bones:
-      bone        = pose_bone.bone
-      bone_trans  = self.__transformTranslationToExport(bone.matrix_local.to_translation())
+      assert type(pose_bone) == bpy_types.PoseBone
+      bone = pose_bone.bone
+      assert type(bone) == bpy_types.Bone
+
+      #
+      # The matrix_local field of each bone is relative to the origin
+      # of the armature. To retrieve a parent-relative matrix, it's
+      # necessary to multiply the bone's matrix by the inverse of its
+      # parent matrix.
+      #
+
+      if bone.parent:
+        mat = bone.matrix_local * bone.parent.matrix_local.inverted()
+      else:
+        mat = bone.matrix_local
+      #endif
+
+      bone_trans  = self.__transformTranslationToExport(mat.to_translation())
+      bone_scale  = self.__transformScaleToExport(mat.to_scale())
       bone_orient = self.__transformOrientationToExport(bone.matrix.to_quaternion())
-      bone_scale  = self.__transformScaleToExport(bone.matrix_local.to_scale())
 
       out_file.write("    [bone\n")
       out_file.write("      [bone-name             \"%s\"]\n" % bone.name)
