@@ -17,7 +17,7 @@
 bl_info = {
   "name":        "Calcium format",
   "author":      "io7m",
-  "version":     (0, 0, 1),
+  "version":     (0, 0, 2),
   "blender":     (2, 66, 0),
   "location":    "File > Export > Calcium (.ca)",
   "description": "Export armatures and actions.",

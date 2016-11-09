@@ -102,6 +102,26 @@ class CalciumExporter:
     return mathutils.Quaternion(axis, aa[1])
   #end
 
+  __supported_interpolation = {
+    "CONSTANT" : "constant",
+    "LINEAR"   : "linear",
+    "EXPO"     : "exponential"
+  }
+
+  def __transformInterpolation(self, i):
+    return self.__supported_interpolation.get(i, None)
+  #end
+
+  __supported_easing = {
+    "EASE_IN"     : "in",
+    "EASE_OUT"    : "out",
+    "EASE_IN_OUT" : "in-out"
+  }
+
+  def __transformEasing(self, e):
+    return self.__supported_easing.get(e, None)
+  #end
+
   #
   # Check that for all keyframes k in a channel c, there is a corresponding
   # keyframe in all other channels at the same frame as k.
@@ -111,6 +131,8 @@ class CalciumExporter:
     assert type(action) == bpy.types.Action
     assert type(group_name) == str
     assert type(group_channels) == type({})
+
+    self.__log("[%s] __checkKeyframesCorresponding %s", action.name, group_name)
 
     ok = True
     for channel_name, channel_frames in group_channels.items():
@@ -150,6 +172,8 @@ class CalciumExporter:
     assert type(group_name) == str
     assert type(group_channels) == type({})
 
+    self.__log("[%s] __checkKeyframesCountsEqual %s", action.name, group_name)
+
     counts = {}
     for channel_name, channel in group_channels.items():
       assert type(channel_name) == str
@@ -187,6 +211,8 @@ class CalciumExporter:
     assert type(group_name) == str
     assert type(group_channels) == type({})
 
+    self.__log("[%s] __checkAllChannelsArePresent %s", action.name, group_name)
+
     #
     # If all of the channels are missing, then the group is simply assumed
     # not to exist.
@@ -194,9 +220,12 @@ class CalciumExporter:
 
     missing = 0
     for channel_name, channel in group_channels.items():
-      missing += channel == None
+      if channel == None:
+        missing += 1
+      #endif
     #endif
 
+    self.__log("[%s] __checkAllChannelsArePresent %s: missing %d", action.name, group_name, missing)
     if missing == len(group_channels):
       self.__log("[%s] group %s has no keyframes, ignoring it", action.name, group_name)
       return False
@@ -230,6 +259,8 @@ class CalciumExporter:
     assert type(group_name) == str
     assert type(group_channels) == type({})
 
+    self.__log("[%s] __calculateKeyframesCollect %s", action.name, group_name)
+
     keyframes_by_channel = {}
     for channel_name, channel in group_channels.items():
       assert type(channel_name) == str
@@ -255,45 +286,93 @@ class CalciumExporter:
     assert type(group_name) == str
     assert type(keyframes_by_channel) == type({})
 
+    self.__log("[%s] __calculateKeyframesCollectForExport %s", action.name, group_name)
+
     error = False
     keyframes = {}
     for channel_name, channel_keyframes in keyframes_by_channel.items():
       for keyframe_index, keyframe in channel_keyframes.items():
 
-        if keyframe_index in keyframes:
-          existing = keyframes[keyframe_index]
-          if existing != None:
-            if existing.interpolation != keyframe.interpolation:
-              text  = "The interpolation value is not the same for all channels at this keyframe.\n"
-              text += "  Action:                         %s\n" % action.name
-              text += "  Group:                          %s\n" % group_name
-              text += "  Channel:                        %s\n" % channel_name
-              text += "  Keyframe:                       %d\n" % keyframe_index
-              text += "  Interpolation:                  %s\n" % keyframe.interpolation
-              text += "  Interpolation in other channel: %s\n" % existing.interpolation
-              text += "  Possible solution: Set the interpolation value to %s for all channels at this keyframe\n" % existing.interpolation
-              self.__errors.append(text)
-              error = True
-            #endif
+        self.__log("[%s][%s][%d]: interpolation %s", action.name, group_name, keyframe_index, keyframe.interpolation)
+        self.__log("[%s][%s][%d]: easing %s", action.name, group_name, keyframe_index, keyframe.easing)
 
-            if existing.easing != keyframe.easing:
-              text  = "The easing value is not the same for all channels at this keyframe.\n"
-              text += "  Action:                  %s\n" % action.name
-              text += "  Group:                   %s\n" % group_name
-              text += "  Channel:                 %s\n" % channel_name
-              text += "  Keyframe:                %d\n" % keyframe_index
-              text += "  Easing:                  %s\n" % keyframe.easing
-              text += "  Easing in other channel: %s\n" % existing.easing
-              text += "  Possible solution: Set the easing value to %s for all channels at this keyframe\n" % existing.easing
-              self.__errors.append(text)
-              error = True
+        ex_interpolation = self.__transformInterpolation(keyframe.interpolation)
+        if ex_interpolation == None:
+          text = "The keyframe interpolation type is not supported.\n"
+          text += "  Action:        %s\n" % action.name
+          text += "  Group:         %s\n" % group_name
+          text += "  Channel:       %s\n" % channel_name
+          text += "  Keyframe:      %d\n" % keyframe_index
+          text += "  Interpolation: %s\n" % keyframe.interpolation
+          text += "  Possible solution: Use a supported interpolation type (%s)\n" % list(self.__supported_interpolation.values())
+          self.__errors.append(text)
+          error = True
+        else:
+          if keyframe_index in keyframes:
+            existing = keyframes[keyframe_index]
+            if existing != None:
+              assert type(existing) == CalciumKeyframe
+
+              if existing.interpolation != ex_interpolation:
+                text  = "The interpolation value is not the same for all channels at this keyframe.\n"
+                text += "  Action:                         %s\n" % action.name
+                text += "  Group:                          %s\n" % group_name
+                text += "  Channel:                        %s\n" % channel_name
+                text += "  Keyframe:                       %d\n" % keyframe_index
+                text += "  Interpolation:                  %s\n" % keyframe.interpolation
+                text += "  Interpolation in other channel: %s\n" % existing.interpolation
+                text += "  Possible solution: Set the interpolation value to %s for all channels at this keyframe\n" % existing.interpolation
+                self.__errors.append(text)
+                error = True
+              #endif
             #endif
           #endif
         #endif
 
-        keyframes[keyframe_index] = CalciumKeyframe(keyframe_index, keyframe.interpolation, keyframe.easing)
+        ex_easing = self.__transformEasing(keyframe.easing)
+        if ex_easing == None:
+          text = "The keyframe easing type is not supported.\n"
+          text += "  Action:        %s\n" % action.name
+          text += "  Group:         %s\n" % group_name
+          text += "  Channel:       %s\n" % channel_name
+          text += "  Keyframe:      %d\n" % keyframe_index
+          text += "  Interpolation: %s\n" % keyframe.easing
+          text += "  Possible solution: Use a supported easing type (%s)\n" % list(self.__supported_easing.values())
+          self.__errors.append(text)
+          error = True
+        else:
+          if keyframe_index in keyframes:
+            existing = keyframes[keyframe_index]
+            if existing != None:
+              assert type(existing) == CalciumKeyframe
+
+              if existing.easing != ex_easing:
+                text  = "The easing value is not the same for all channels at this keyframe.\n"
+                text += "  Action:                         %s\n" % action.name
+                text += "  Group:                          %s\n" % group_name
+                text += "  Channel:                        %s\n" % channel_name
+                text += "  Keyframe:                       %d\n" % keyframe_index
+                text += "  Interpolation:                  %s\n" % keyframe.easing
+                text += "  Interpolation in other channel: %s\n" % existing.easing
+                text += "  Possible solution: Set the easing value to %s for all channels at this keyframe\n" % existing.easing
+                self.__errors.append(text)
+                error = True
+              #endif
+            #endif
+          #endif
+        #endif
+
+        if not error:
+          assert type(ex_interpolation) == str
+          assert type(ex_easing) == str
+          keyframes[keyframe_index] = CalciumKeyframe(keyframe_index, ex_interpolation, ex_easing)
+        #endif
       #endfor
     #endfor
+
+    if error:
+      return None
+    #endif
 
     return keyframes
   #end
@@ -303,7 +382,7 @@ class CalciumExporter:
     assert type(group_name) == str
     assert type(group_channels) == type({})
 
-    self.__log("[%s] finding keyframes for %s", action.name, group_name)
+    self.__log("[%s] __calculateKeyframesForCurves %s", action.name, group_name)
 
     if not self.__checkAllChannelsArePresent(action, group_name, group_channels):
       return None
@@ -361,6 +440,8 @@ class CalciumExporter:
         value = self.__transformTranslationToExport(bone.matrix.to_translation())
         out_file.write("        [curve-keyframe\n")
         out_file.write("          [curve-keyframe-index %d]\n" % index)
+        out_file.write("          [curve-keyframe-interpolation \"%s\"]\n" % frame.interpolation)
+        out_file.write("          [curve-keyframe-easing \"%s\"]\n" % frame.easing)
         out_file.write("          [curve-keyframe-vector3 %f %f %f]]\n" % (value.x, value.y, value.z))
       #end
 
@@ -409,6 +490,8 @@ class CalciumExporter:
         value = self.__transformScaleToExport(bone.matrix.to_scale())
         out_file.write("        [curve-keyframe\n")
         out_file.write("          [curve-keyframe-index %d]\n" % index)
+        out_file.write("          [curve-keyframe-interpolation \"%s\"]\n" % frame.interpolation)
+        out_file.write("          [curve-keyframe-easing \"%s\"]\n" % frame.easing)
         out_file.write("          [curve-keyframe-vector3 %f %f %f]]\n" % (value.x, value.y, value.z))
       #end
 
@@ -458,6 +541,8 @@ class CalciumExporter:
         value = self.__transformOrientationToExport(bone.matrix.to_quaternion())
         out_file.write("        [curve-keyframe\n")
         out_file.write("          [curve-keyframe-index %d]\n" % index)
+        out_file.write("          [curve-keyframe-interpolation \"%s\"]\n" % frame.interpolation)
+        out_file.write("          [curve-keyframe-easing \"%s\"]\n" % frame.easing)
         out_file.write("          [curve-keyframe-quaternion-xyzw %f %f %f %f]]\n" % (value.x, value.y, value.z, value.w))
       #end
 
