@@ -519,7 +519,8 @@ class CalciumExporter:
         armature.animation_data.action = action
 
         out_file.write("[action\n")
-        out_file.write("  [name \"%s\"]\n" % action.name)
+        out_file.write("  [action-name \"%s\"]\n" % action.name)
+        out_file.write("  [action-length %d]\n" % int(action.frame_range.y - action.frame_range.x))
         out_file.write("  [curves\n")
         out_file.write("\n")
 
