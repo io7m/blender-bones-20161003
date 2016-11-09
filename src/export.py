@@ -48,6 +48,18 @@ class CalciumExportFailed(Exception):
   #end
 #endclass
 
+class CalciumKeyframe:
+  index         = 0
+  interpolation = 'LINEAR'
+  easing        = 'IN_OUT'
+
+  def __init__(self, _index, _interpolation, _easing):
+    self.index         = _index
+    self.interpolation = _interpolation
+    self.easing        = _easing
+  #end
+#endclass
+
 class CalciumExporter:
   __verbose     = False
   __axis_matrix = bpy_extras.io_utils.axis_conversion(to_forward='-Z', to_up='Y').to_4x4()
@@ -71,15 +83,242 @@ class CalciumExporter:
     #endif
   #end
 
-  def __convertMatrix(self, m):
-    return self.__axis_matrix * m
+  def __transformScaleToExport(self, v):
+    assert type(v) == mathutils.Vector
+    return mathutils.Vector((v.x, v.z, v.y))
   #end
 
-  def __convertQuaternion(self, q):
+  def __transformTranslationToExport(self, v):
+    assert type(v) == mathutils.Vector
+    return self.__axis_matrix * v
+  #end
+
+  def __transformOrientationToExport(self, q):
+    assert type(q) == mathutils.Quaternion
+
     aa = q.to_axis_angle()
     axis = aa[0]
     axis = self.__axis_matrix * axis
     return mathutils.Quaternion(axis, aa[1])
+  #end
+
+  #
+  # Check that for all keyframes k in a channel c, there is a corresponding
+  # keyframe in all other channels at the same frame as k.
+  #
+
+  def __checkKeyframesCorresponding(self, action, group_name, group_channels):
+    assert type(action) == bpy.types.Action
+    assert type(group_name) == str
+    assert type(group_channels) == type({})
+
+    ok = True
+    for channel_name, channel_frames in group_channels.items():
+      for channel_name_other, channel_frames_other in group_channels.items():
+
+        if channel_name_other == channel_name:
+          continue
+        #endif
+
+        for frame_index in channel_frames.keys():
+          if not (frame_index in channel_frames_other):
+            text =  "A keyframe for a channel of a group is missing corresponding keyframes in the other group channels.\n"
+            text += "  Action:                        %s\n" % action.name
+            text += "  Group:                         %s\n" % group_name
+            text += "  Frame at:                      %d\n" % frame_index
+            text += "  Channel:                       %s\n" % channel_name
+            text += "  Channel with missing keyframe: %s\n" % channel_name_other
+            text += "  Possible solution: Create a keyframe at frame %d for channel %s of group %s\n" % (frame_index, channel_name_other, group_name)
+            self.__errors.append(text)
+            ok = False
+            continue
+          #endif
+        #endfor
+      #endfor
+    #endfor
+
+    return ok
+  #end
+
+  #
+  # Check that all of the given group channels have the same number of
+  # keyframes.
+  #
+
+  def __checkKeyframesCountsEqual(self, action, group_name, group_channels):
+    assert type(action) == bpy.types.Action
+    assert type(group_name) == str
+    assert type(group_channels) == type({})
+
+    counts = {}
+    for channel_name, channel in group_channels.items():
+      assert type(channel_name) == str
+      assert type(channel) == bpy.types.FCurve
+      counts[channel_name] = len(channel.keyframe_points)
+    #endfor
+
+    uniques = len(set(counts.values()))
+    if uniques > 1:
+      text  = "The channels of a group have a different number of keyframes.\n"
+      text += "  Action:                      %s\n" % action.name
+      text += "  Group:                       %s\n" % group_name
+
+      for channel_name, count in counts.items():
+        text += "  Keyframe count for channel %s: %d\n" % (channel_name, count)
+      #endfor
+
+      text += "  Solution: Create a matching number of keyframes for all channels in the group\n"
+      self.__errors.append(text)
+      return False
+    #endif
+
+    assert uniques == 1
+    return True
+  #end
+
+  #
+  # Check that all of the channels of a given group are present. If none
+  # of them are present, then the group is simply assumed not to exist and
+  # ignored.
+  #
+
+  def __checkAllChannelsArePresent(self, action, group_name, group_channels):
+    assert type(action) == bpy.types.Action
+    assert type(group_name) == str
+    assert type(group_channels) == type({})
+
+    #
+    # If all of the channels are missing, then the group is simply assumed
+    # not to exist.
+    #
+
+    missing = 0
+    for channel_name, channel in group_channels.items():
+      missing += channel == None
+    #endif
+
+    if missing == len(group_channels):
+      self.__log("[%s] group %s has no keyframes, ignoring it", action.name, group_name)
+      return False
+    #endif
+
+    #
+    # However, if one or more channels are missing, then this is an error.
+    #
+
+    if missing > 0:
+      for channel_name, channel in group_channels.items():
+        text =  "No keyframes are defined for a channel of a group.\n"
+        text += "  Action:   %s\n" % action.name
+        text += "  Group:    %s\n" % group_name
+        text += "  Channel:  %s\n" % channel_name
+        text += "  Solution: Create the same number of keyframes for all channels of the group\n"
+        self.__errors.append(text)
+      #endfor
+      return False
+    #endif
+
+    return True
+  #end
+
+  #
+  # For the given group, collect all of the keyframes.
+  #
+
+  def __calculateKeyframesCollect(self, action, group_name, group_channels):
+    assert type(action) == bpy.types.Action
+    assert type(group_name) == str
+    assert type(group_channels) == type({})
+
+    keyframes_by_channel = {}
+    for channel_name, channel in group_channels.items():
+      assert type(channel_name) == str
+      assert type(channel) == bpy.types.FCurve
+
+      channel_frames = {}
+      for frame in channel.keyframe_points:
+        channel_frames[int(frame.co.x)] = frame
+      #endfor
+      keyframes_by_channel[channel_name] = channel_frames
+    #endfor
+
+    return keyframes_by_channel
+  #end
+
+  #
+  # Collect all keyframes for export. This assumes that all of the other __calculateKeyframes
+  # preconditions have been evaluated.
+  #
+
+  def __calculateKeyframesCollectForExport(self, action, group_name, keyframes_by_channel):
+    assert type(action) == bpy.types.Action
+    assert type(group_name) == str
+    assert type(keyframes_by_channel) == type({})
+
+    error = False
+    keyframes = {}
+    for channel_name, channel_keyframes in keyframes_by_channel.items():
+      for keyframe_index, keyframe in channel_keyframes.items():
+
+        if keyframe_index in keyframes:
+          existing = keyframes[keyframe_index]
+          if existing != None:
+            if existing.interpolation != keyframe.interpolation:
+              text  = "The interpolation value is not the same for all channels at this keyframe.\n"
+              text += "  Action:                         %s\n" % action.name
+              text += "  Group:                          %s\n" % group_name
+              text += "  Channel:                        %s\n" % channel_name
+              text += "  Keyframe:                       %d\n" % keyframe_index
+              text += "  Interpolation:                  %s\n" % keyframe.interpolation
+              text += "  Interpolation in other channel: %s\n" % existing.interpolation
+              text += "  Possible solution: Set the interpolation value to %s for all channels at this keyframe\n" % existing.interpolation
+              self.__errors.append(text)
+              error = True
+            #endif
+
+            if existing.easing != keyframe.easing:
+              text  = "The easing value is not the same for all channels at this keyframe.\n"
+              text += "  Action:                  %s\n" % action.name
+              text += "  Group:                   %s\n" % group_name
+              text += "  Channel:                 %s\n" % channel_name
+              text += "  Keyframe:                %d\n" % keyframe_index
+              text += "  Easing:                  %s\n" % keyframe.easing
+              text += "  Easing in other channel: %s\n" % existing.easing
+              text += "  Possible solution: Set the easing value to %s for all channels at this keyframe\n" % existing.easing
+              self.__errors.append(text)
+              error = True
+            #endif
+          #endif
+        #endif
+
+        keyframes[keyframe_index] = CalciumKeyframe(keyframe_index, keyframe.interpolation, keyframe.easing)
+      #endfor
+    #endfor
+
+    return keyframes
+  #end
+
+  def __calculateKeyframesForCurves(self, action, group_name, group_channels):
+    assert type(action) == bpy.types.Action
+    assert type(group_name) == str
+    assert type(group_channels) == type({})
+
+    self.__log("[%s] finding keyframes for %s", action.name, group_name)
+
+    if not self.__checkAllChannelsArePresent(action, group_name, group_channels):
+      return None
+    #endif
+
+    if not self.__checkKeyframesCountsEqual(action, group_name, group_channels):
+      return None
+    #endif
+
+    keyframes_by_channel = self.__calculateKeyframesCollect(action, group_name, group_channels)
+    if not self.__checkKeyframesCorresponding(action, group_name, keyframes_by_channel):
+      return None
+    #endif
+
+    return self.__calculateKeyframesCollectForExport(action, group_name, keyframes_by_channel)
   #end
 
   def __writeBoneCurvesTranslation(self, out_file, armature, action, bone_name):
@@ -89,27 +328,16 @@ class CalciumExporter:
     assert armature.type == 'ARMATURE'
     assert type(bone_name) == str
 
-    curve_name = 'pose.bones["%s"].location' % bone_name
+    group_name          = 'pose.bones["%s"].location' % bone_name
+    group_channels      = {}
+    group_channels["X"] = action.fcurves.find(group_name, 0)
+    group_channels["Y"] = action.fcurves.find(group_name, 1)
+    group_channels["Z"] = action.fcurves.find(group_name, 2)
 
-    frames = {}
-    curve_x = action.fcurves.find(curve_name, 0)
-    curve_y = action.fcurves.find(curve_name, 1)
-    curve_z = action.fcurves.find(curve_name, 2)
+    frames = self.__calculateKeyframesForCurves(action, group_name, group_channels)
 
-    if curve_x != None:
-      for frame in curve_x.keyframe_points:
-        frames[int(frame.co.x)] = True
-      #endfor
-    #endif
-    if curve_y != None:
-      for frame in curve_y.keyframe_points:
-        frames[int(frame.co.x)] = True
-      #endfor
-    #endif
-    if curve_z != None:
-      for frame in curve_z.keyframe_points:
-        frames[int(frame.co.x)] = True
-      #endfor
+    if frames == None:
+      return
     #endif
 
     frames_count = len(frames)
@@ -124,9 +352,13 @@ class CalciumExporter:
       bone = armature.pose.bones[bone_name]
 
       for index in sorted(frames.keys()):
+        assert type(index) == int
+        frame = frames[index]
+        assert type(frame) == CalciumKeyframe
+
         bpy.context.scene.frame_set(index)
 
-        value = self.__convertMatrix(bone.matrix).to_translation()
+        value = self.__transformTranslationToExport(bone.matrix.to_translation())
         out_file.write("        [curve-keyframe\n")
         out_file.write("          [curve-keyframe-index %d]\n" % index)
         out_file.write("          [curve-keyframe-vector3 %f %f %f]]\n" % (value.x, value.y, value.z))
@@ -144,27 +376,16 @@ class CalciumExporter:
     assert armature.type == 'ARMATURE'
     assert type(bone_name) == str
 
-    curve_name = 'pose.bones["%s"].scale' % bone_name
+    group_name = 'pose.bones["%s"].scale' % bone_name
+    group_channels      = {}
+    group_channels["X"] = action.fcurves.find(group_name, 0)
+    group_channels["Y"] = action.fcurves.find(group_name, 1)
+    group_channels["Z"] = action.fcurves.find(group_name, 2)
 
-    frames = {}
-    curve_x = action.fcurves.find(curve_name, 0)
-    curve_y = action.fcurves.find(curve_name, 1)
-    curve_z = action.fcurves.find(curve_name, 2)
+    frames = self.__calculateKeyframesForCurves(action, group_name, group_channels)
 
-    if curve_x != None:
-      for frame in curve_x.keyframe_points:
-        frames[int(frame.co.x)] = True
-      #endfor
-    #endif
-    if curve_y != None:
-      for frame in curve_y.keyframe_points:
-        frames[int(frame.co.x)] = True
-      #endfor
-    #endif
-    if curve_z != None:
-      for frame in curve_z.keyframe_points:
-        frames[int(frame.co.x)] = True
-      #endfor
+    if frames == None:
+      return
     #endif
 
     frames_count = len(frames)
@@ -179,9 +400,13 @@ class CalciumExporter:
       bone = armature.pose.bones[bone_name]
 
       for index in sorted(frames.keys()):
+        assert type(index) == int
+        frame = frames[index]
+        assert type(frame) == CalciumKeyframe
+
         bpy.context.scene.frame_set(index)
 
-        value = self.__convertMatrix(bone.matrix).to_scale()
+        value = self.__transformScaleToExport(bone.matrix.to_scale())
         out_file.write("        [curve-keyframe\n")
         out_file.write("          [curve-keyframe-index %d]\n" % index)
         out_file.write("          [curve-keyframe-vector3 %f %f %f]]\n" % (value.x, value.y, value.z))
@@ -199,33 +424,17 @@ class CalciumExporter:
     assert armature.type == 'ARMATURE'
     assert type(bone_name) == str
 
-    curve_name = 'pose.bones["%s"].rotation_quaternion' % bone_name
+    group_name = 'pose.bones["%s"].rotation_quaternion' % bone_name
+    group_channels      = {}
+    group_channels["W"] = action.fcurves.find(group_name, 0)
+    group_channels["X"] = action.fcurves.find(group_name, 1)
+    group_channels["Y"] = action.fcurves.find(group_name, 2)
+    group_channels["Z"] = action.fcurves.find(group_name, 3)
 
-    frames = {}
-    curve_w = action.fcurves.find(curve_name, 0)
-    curve_x = action.fcurves.find(curve_name, 1)
-    curve_y = action.fcurves.find(curve_name, 2)
-    curve_z = action.fcurves.find(curve_name, 3)
+    frames = self.__calculateKeyframesForCurves(action, group_name, group_channels)
 
-    if curve_x != None:
-      for frame in curve_x.keyframe_points:
-        frames[int(frame.co.x)] = True
-      #endfor
-    #endif
-    if curve_y != None:
-      for frame in curve_y.keyframe_points:
-        frames[int(frame.co.x)] = True
-      #endfor
-    #endif
-    if curve_z != None:
-      for frame in curve_z.keyframe_points:
-        frames[int(frame.co.x)] = True
-      #endfor
-    #endif
-    if curve_w != None:
-      for frame in curve_w.keyframe_points:
-        frames[int(frame.co.x)] = True
-      #endfor
+    if frames == None:
+      return
     #endif
 
     frames_count = len(frames)
@@ -240,9 +449,13 @@ class CalciumExporter:
       bone = armature.pose.bones[bone_name]
 
       for index in sorted(frames.keys()):
+        assert type(index) == int
+        frame = frames[index]
+        assert type(frame) == CalciumKeyframe
+
         bpy.context.scene.frame_set(index)
 
-        value = self.__convertQuaternion(bone.matrix.to_quaternion())
+        value = self.__transformOrientationToExport(bone.matrix.to_quaternion())
         out_file.write("        [curve-keyframe\n")
         out_file.write("          [curve-keyframe-index %d]\n" % index)
         out_file.write("          [curve-keyframe-quaternion-xyzw %f %f %f %f]]\n" % (value.x, value.y, value.z, value.w))
@@ -264,10 +477,9 @@ class CalciumExporter:
 
     for pose_bone in armature.pose.bones:
       bone        = pose_bone.bone
-      bone_mat    = self.__convertMatrix(bone.matrix_local)
-      bone_trans  = bone_mat.to_translation()
-      bone_orient = self.__convertQuaternion(bone.matrix.to_quaternion())
-      bone_scale  = bone_mat.to_scale()
+      bone_trans  = self.__transformTranslationToExport(bone.matrix_local.to_translation())
+      bone_orient = self.__transformOrientationToExport(bone.matrix.to_quaternion())
+      bone_scale  = self.__transformScaleToExport(bone.matrix_local.to_scale())
 
       out_file.write("    [bone\n")
       out_file.write("      [bone-name             \"%s\"]\n" % bone.name)
@@ -332,6 +544,10 @@ class CalciumExporter:
 
     out_file.write("\n")
   #end
+
+  #
+  # Export all of the weights for a given mesh.
+  #
 
   def __writeMeshWeights(self, out_file, mesh):
     assert type(out_file) == io.TextIOWrapper
@@ -410,7 +626,9 @@ class CalciumExporter:
       for error in self.__errors:
         error_file.write("%s\n" % error)
       #endfor
-      error_file.write("Export failed due to errors.\n")
+
+      error_file.write("\n")
+      error_file.write("Export failed with %d errors.\n" % len(self.__errors))
       raise CalciumExportFailed("Exporting failed due to errors.\nSee the log file at: %s" % error_path)
     else:
       error_file.write("Exported successfully.\n")
