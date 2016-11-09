@@ -39,6 +39,15 @@ class CalciumTooManyArmaturesSelected(Exception):
   #end
 #endclass
 
+class CalciumExportFailed(Exception):
+  def __init__(self, value):
+    self.value = value
+  #end
+  def __str__(self):
+    return repr(self.value)
+  #end
+#endclass
+
 class CalciumExporter:
   __verbose     = False
   __axis_matrix = bpy_extras.io_utils.axis_conversion(to_forward='-Z', to_up='Y').to_4x4()
@@ -387,8 +396,9 @@ class CalciumExporter:
     #endif
   #end
 
-  def __writeErrorLog(self, error_file, armature):
+  def __writeErrorLog(self, error_file, error_path, armature):
     assert type(error_file) == io.TextIOWrapper
+    assert type(error_path) == str
     assert type(armature) == bpy_types.Object
     assert armature.type == 'ARMATURE'
 
@@ -398,9 +408,10 @@ class CalciumExporter:
 
     if len(self.__errors) > 0:
       for error in self.__errors:
-        error_file.write("%s\n", error)
+        error_file.write("%s\n" % error)
       #endfor
       error_file.write("Export failed due to errors.\n")
+      raise CalciumExportFailed("Exporting failed due to errors.\nSee the log file at: %s" % error_path)
     else:
       error_file.write("Exported successfully.\n")
     #endif
@@ -436,10 +447,8 @@ class CalciumExporter:
       self.__log("opening: %s", error_path)
       with open(error_path, "wt") as error_file:
         self.__writeFile(out_file, armature)
-        self.__writeErrorLog(error_file, armature)
-        self.__log("closing: %s", error_path)
+        self.__writeErrorLog(error_file, error_path, armature)
       #endwith
-      self.__log("closing: %s", path)
     #endwith
   #end
 

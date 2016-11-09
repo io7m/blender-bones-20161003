@@ -56,6 +56,8 @@ class ExportCalcium(bpy.types.Operator):
       self.report({'ERROR'}, ex.value)
     except export.CalciumTooManyArmaturesSelected as ex:
       self.report({'ERROR'}, ex.value)
+    except export.CalciumExportFailed as ex:
+      self.report({'ERROR'}, ex.value)
     #endtry
 
     return {'FINISHED'}
